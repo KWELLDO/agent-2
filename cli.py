@@ -14,11 +14,24 @@ if "cli" not in sys.modules:
     sys.modules["cli"] = sys.modules[__name__]
 
 # ================= 配置区 =================
-url = "https://api.deepseek.com/chat/completions"
-headers = {
-    "Authorization": "Bearer REDACTED",
-    "Content-Type": "application/json"
+# 供应商与模型配置：每个供应商含 base_url、api_key、auth_scheme（bearer/raw）、models
+# 运行中用 /provider、/model 命令切换；api_key 也可改为 os.environ.get(...) 读取
+PROVIDERS = {
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/chat/completions",
+        "api_key": "REDACTED",
+        "auth_scheme": "bearer",
+        "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
+    },
+    "tongyi": {
+        "base_url": "http://10.40.187.243:8003/model/three_tongyi_bd/v1/chat/completions",
+        "api_key": "szyg-1224",
+        "auth_scheme": "raw",
+        "models": ["default"],
+    },
 }
+DEFAULT_PROVIDER = "deepseek"
+DEFAULT_MODEL = "deepseek-v4-flash"
 system_content = "你是一位专业的AI助手Coding助手,帮助用户编写软件代码。约束:不虚构不存在的信息,凡是预设和假设都会在【】 中说明"
 
 # 【假设】目标API兼容 OpenAI 格式，支持 stream=True 及 tools 字段
@@ -241,9 +254,11 @@ def command_help():
 
 class Ctx:
     """贯穿工具与命令的上下文。插件只应通过 ctx 读写状态，不直接碰核心内部。"""
-    def __init__(self, system_content, root="."):
+    def __init__(self, system_content, root=".", provider=None, model=None):
         self.system_content = system_content  # 基础系统提示（不含项目上下文）
         self.root = os.path.abspath(root)
+        self.provider = provider or DEFAULT_PROVIDER
+        self.model = model or DEFAULT_MODEL
         self.running = True
         self.messages = []
         self._rebuild_system_prompt()
@@ -273,6 +288,28 @@ class Ctx:
     def resolve(self, path):
         """将相对路径解析到当前工作区 root；绝对路径原样返回"""
         return path if os.path.isabs(path) else os.path.join(self.root, path)
+
+    def get_url(self):
+        return PROVIDERS[self.provider]["base_url"]
+
+    def get_headers(self):
+        p = PROVIDERS[self.provider]
+        auth = ("Bearer " + p["api_key"]) if p.get("auth_scheme", "bearer") == "bearer" else p["api_key"]
+        return {"Authorization": auth, "Content-Type": "application/json"}
+
+    def set_provider(self, name):
+        """切换供应商，模型重置为该供应商第一个。返回 (ok, info)"""
+        if name not in PROVIDERS:
+            return False, f"未知供应商: {name}（可用: {', '.join(PROVIDERS)}）"
+        self.provider = name
+        self.model = PROVIDERS[name]["models"][0]
+        return True, f"{name}（模型已重置为 {self.model}）"
+
+    def set_model(self, name):
+        """切换模型。若不在当前供应商预设列表则仍允许但提示。返回 (ok, info)"""
+        self.model = name
+        in_list = name in PROVIDERS[self.provider]["models"]
+        return True, name + ("" if in_list else f"（注意：{name} 不在 {self.provider} 预设模型列表中）")
 
     def reset(self):
         self.messages = []
@@ -357,13 +394,13 @@ def call_llm(ctx: Ctx):
         rounds += 1
         # 每轮重新序列化 payload，携带上一轮工具调用结果，避免用旧数据重复请求
         payload = {
-            "model": "deepseek-v4-flash",
+            "model": ctx.model,
             "messages": ctx.messages,
             "tools": tool_schemas(),
             "stream": True,
         }
         data = json.dumps(payload).encode("utf-8")
-        req = urllib.request.Request(url, data=data, headers=headers, method="POST")
+        req = urllib.request.Request(ctx.get_url(), data=data, headers=ctx.get_headers(), method="POST")
         try:
             response = urllib.request.urlopen(req)
         except urllib.error.HTTPError as e:
@@ -461,6 +498,7 @@ def main():
     # 2. 创建上下文（自动扫描启动目录为工作区，注入 system prompt）
     ctx = Ctx(system_content, root=".")
     print_styled(f"📂 当前工作区: {ctx.root}", Style.CYAN)
+    print_styled(f"🤖 供应商: {ctx.provider} | 模型: {ctx.model}", Style.CYAN)
     print_styled("\n💡 可用命令:\n" + command_help(), Style.CYAN)
 
     while ctx.running:

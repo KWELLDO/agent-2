@@ -62,3 +62,29 @@ def cmd_cd(arg_str, ctx: Ctx):
 @command("/pwd", "显示当前工作区")
 def cmd_pwd(arg_str, ctx: Ctx):
     ctx.print(ctx.root, Style.CYAN)
+
+
+@command("/provider", "切换供应商: /provider [name]（无参数列出可用）")
+def cmd_provider(arg_str, ctx: Ctx):
+    from cli import PROVIDERS
+    name = arg_str.strip()
+    if not name:
+        lines = [f"  {n}{' (当前)' if n == ctx.provider else ''} -> {', '.join(p['models'])}"
+                 for n, p in PROVIDERS.items()]
+        ctx.print("可用供应商:\n" + "\n".join(lines), Style.CYAN)
+        return
+    ok, info = ctx.set_provider(name)
+    ctx.print(("✅ 供应商已切换: " + info) if ok else ("❌ " + info), Style.GREEN if ok else Style.RED)
+
+
+@command("/model", "切换模型: /model [name]（无参数列出当前供应商模型）")
+def cmd_model(arg_str, ctx: Ctx):
+    from cli import PROVIDERS
+    name = arg_str.strip()
+    if not name:
+        models = PROVIDERS[ctx.provider]["models"]
+        lines = [f"  {m}{' (当前)' if m == ctx.model else ''}" for m in models]
+        ctx.print(f"供应商 {ctx.provider} 的模型:\n" + "\n".join(lines), Style.CYAN)
+        return
+    ok, info = ctx.set_model(name)
+    ctx.print(("✅ 模型已切换: " + info) if ok else ("❌ " + info), Style.GREEN if ok else Style.RED)

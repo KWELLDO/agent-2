@@ -5,6 +5,7 @@
 ## [Unreleased]
 
 ### Added
+- **供应商与模型切换**：新增 `/provider [name]`、`/model [name]` 命令在运行中切换 LLM 供应商与模型；配置区改为 `PROVIDERS` 表（含 base_url/api_key/auth_scheme/models），预置 deepseek（bearer 鉴权）与 tongyi（raw 鉴权）；`Ctx` 持有 provider/model，`call_llm` 改用 `ctx.get_url()/get_headers()/ctx.model`；切换供应商时模型自动重置为该供应商首选。启动时显示当前供应商/模型。
 - **工作区切换**：新增 `/cd <dir>` 命令切换工作区（支持相对当前目录或绝对路径），切换后自动重新扫描项目上下文并刷新 system prompt；新增 `/pwd` 查看当前工作区。启动时显示当前工作区。运行中不再锁定启动目录。
 - **工具路径统一基于工作区**：`write_file`/`read_file` 改用 `ctx.resolve(path)` 解析路径（相对 `ctx.root`，绝对路径原样），`run_command` 以 `ctx.root` 为 `cwd` 执行。`/cd` 切换后工具立即在新工作区生效，`ctx.root` 不再是摆设。
 
