@@ -1,0 +1,14 @@
+# Python 字节码
+__pycache__/
+*.py[cod]
+
+# 虚拟环境
+.venv/
+venv/
+
+# 临时验证脚本（不忽略 __init__.py）
+_verify*.py
+_test*.py
+
+# 测试残留文件
+test*.txt

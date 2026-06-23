@@ -1,0 +1,6 @@
+# CodeAgent-TUI 仅使用 Python 3.12 标准库，无第三方依赖。
+# 运行所需标准库模块: urllib, json, subprocess, shutil, re, os, sys, ctypes
+#
+# 创建虚拟环境:  py -3.12 -m venv .venv
+# 运行:          .venv\Scripts\python.exe -m cli
+# 或:            powershell -ExecutionPolicy Bypass -File run.ps1
