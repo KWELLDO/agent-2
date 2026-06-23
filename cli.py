@@ -241,14 +241,42 @@ def command_help():
 
 class Ctx:
     """贯穿工具与命令的上下文。插件只应通过 ctx 读写状态，不直接碰核心内部。"""
-    def __init__(self, system_prompt, root="."):
-        self.system_prompt = system_prompt
-        self.root = root
-        self.messages = [{"role": "system", "content": system_prompt}]
+    def __init__(self, system_content, root="."):
+        self.system_content = system_content  # 基础系统提示（不含项目上下文）
+        self.root = os.path.abspath(root)
         self.running = True
+        self.messages = []
+        self._rebuild_system_prompt()
+
+    def _rebuild_system_prompt(self):
+        """根据当前 root 扫描项目上下文，重建 system prompt 并同步到 messages 首条"""
+        project_ctx = scan_project_context(self.root)
+        tool_names = ", ".join(_TOOLS.keys()) or "（无）"
+        self.system_prompt = (
+            f"{self.system_content}\n\n【项目上下文】\n{project_ctx}\n\n"
+            f"【可用工具】\n你可以调用 {tool_names}。请严格遵循工具定义返回 JSON。"
+        )
+        if self.messages and self.messages[0].get("role") == "system":
+            self.messages[0]["content"] = self.system_prompt
+        else:
+            self.messages.insert(0, {"role": "system", "content": self.system_prompt})
+
+    def set_workspace(self, path):
+        """切换工作区到 path（相对当前 root 或绝对路径），刷新项目上下文。返回 (ok, info)"""
+        new_root = path if os.path.isabs(path) else os.path.abspath(os.path.join(self.root, path))
+        if not os.path.isdir(new_root):
+            return False, f"目录不存在: {new_root}"
+        self.root = new_root
+        self._rebuild_system_prompt()
+        return True, new_root
+
+    def resolve(self, path):
+        """将相对路径解析到当前工作区 root；绝对路径原样返回"""
+        return path if os.path.isabs(path) else os.path.join(self.root, path)
 
     def reset(self):
-        self.messages = [{"role": "system", "content": self.system_prompt}]
+        self.messages = []
+        self._rebuild_system_prompt()
 
     def print(self, text, *styles):
         """插件统一用 ctx.print 输出带样式文本，无需 import 核心渲染函数"""
@@ -306,6 +334,20 @@ def load_plugins(dirname):
 
 
 # ================= Agent 循环 =================
+
+def _print_tool_result(name, res, preview_limit=500):
+    """终端展示工具结果：短结果完整显示，长结果截断并标注总长度。
+    注意：仅影响终端展示，传给 AI 的始终是完整 res。"""
+    print_styled(f"🔧 {name}:", Style.DIM)
+    if len(res) <= preview_limit:
+        print_styled(res, Style.DIM)
+    else:
+        print_styled(res[:preview_limit], Style.DIM)
+        print_styled(
+            f"... 【结果共 {len(res)} 字符，完整内容已传给 AI，此处仅显示前 {preview_limit} 字符】",
+            Style.DIM,
+        )
+
 
 def call_llm(ctx: Ctx):
     """流式调用 LLM，支持工具循环执行。核心只做调度，工具逻辑全在插件。"""
@@ -398,8 +440,7 @@ def call_llm(ctx: Ctx):
                 except Exception as e:
                     res = f"❌ 工具执行异常: {e}"
                 ctx.messages.append({"role": "tool", "tool_call_id": tc["id"], "content": res})
-                preview = res[:80].replace("\n", " ")
-                print_styled(f"🔧 {name}: {preview}...", Style.DIM)
+                _print_tool_result(name, res)
             continue
         else:
             ctx.messages.append({"role": "assistant", "content": full_content})
@@ -417,15 +458,9 @@ def main():
 
     panel("🚀 CodeAgent-TUI 已就绪 (插件化核心)", Style.BOLD, Style.GREEN)
 
-    # 2. 注入项目上下文到 system prompt
-    project_ctx = scan_project_context()
-    tool_names = ", ".join(_TOOLS.keys()) or "（无）"
-    system_prompt = (
-        f"{system_content}\n\n【项目上下文】\n{project_ctx}\n\n"
-        f"【可用工具】\n你可以调用 {tool_names}。请严格遵循工具定义返回 JSON。"
-    )
-    ctx = Ctx(system_prompt)
-
+    # 2. 创建上下文（自动扫描启动目录为工作区，注入 system prompt）
+    ctx = Ctx(system_content, root=".")
+    print_styled(f"📂 当前工作区: {ctx.root}", Style.CYAN)
     print_styled("\n💡 可用命令:\n" + command_help(), Style.CYAN)
 
     while ctx.running:

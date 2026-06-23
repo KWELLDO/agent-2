@@ -43,3 +43,22 @@ def cmd_write(arg_str, ctx: Ctx):
 @command("/help", "显示可用命令")
 def cmd_help(arg_str, ctx: Ctx):
     ctx.print("可用命令:\n" + command_help(), Style.CYAN)
+
+
+@command("/cd", "切换工作区: /cd <dir>（相对当前或绝对路径）")
+def cmd_cd(arg_str, ctx: Ctx):
+    path = arg_str.strip()
+    if not path:
+        ctx.print("用法: /cd <目录路径>", Style.RED)
+        return
+    ok, info = ctx.set_workspace(path)
+    if ok:
+        ctx.print(f"✅ 工作区已切换到: {info}", Style.GREEN)
+        ctx.print("（项目上下文已刷新）", Style.DIM)
+    else:
+        ctx.print(f"❌ {info}", Style.RED)
+
+
+@command("/pwd", "显示当前工作区")
+def cmd_pwd(arg_str, ctx: Ctx):
+    ctx.print(ctx.root, Style.CYAN)
