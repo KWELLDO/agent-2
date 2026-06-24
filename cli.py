@@ -23,13 +23,13 @@ if "cli" not in sys.modules:
 PROVIDERS = {
     "deepseek": {
         "base_url": "https://api.deepseek.com/chat/completions",
-        "api_key": "REDACTED",
+        "api_key": os.environ.get("DEEPSEEK_API_KEY", ""),
         "auth_scheme": "bearer",
         "models": ["deepseek-v4-flash", "deepseek-v4-pro", "deepseek-chat", "deepseek-reasoner"],
     },
     "tongyi": {
         "base_url": "http://10.40.187.243:8003/model/three_tongyi_bd/v1/chat/completions",
-        "api_key": "szyg-1224",
+        "api_key": os.environ.get("TONGYI_API_KEY", ""),
         "auth_scheme": "raw",
         "models": ["default"],
     },
