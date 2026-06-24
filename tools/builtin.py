@@ -84,6 +84,17 @@ def read_file(args, ctx: Ctx):
 def run_command(args, ctx: Ctx):
     cmd = args["command"]
     ctx.print(f"🖥️ 执行命令: {cmd}", Style.DIM)
-    proc = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=30, cwd=ctx.root)
-    out, err = proc.stdout, proc.stderr
+    try:
+        proc = subprocess.run(
+            cmd, shell=True, capture_output=True, timeout=30,
+            cwd=ctx.root, stdin=subprocess.DEVNULL,
+        )
+    except subprocess.TimeoutExpired:
+        return "❌ 命令执行超时（30秒），已终止。该命令可能是交互式的或需要手动输入。"
+    try:
+        out = proc.stdout.decode("utf-8")
+        err = proc.stderr.decode("utf-8")
+    except UnicodeDecodeError:
+        out = proc.stdout.decode("gbk", errors="replace")
+        err = proc.stderr.decode("gbk", errors="replace")
     return f"stdout:\n{out}\nstderr:\n{err}" if out or err else "命令执行成功，无输出"

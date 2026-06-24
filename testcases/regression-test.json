@@ -1,0 +1,39 @@
+{
+  "apiVersion": "harness.agent/v1",
+  "kind": "TestCase",
+  "metadata": {
+    "name": "regression-output-quality",
+    "labels": {
+      "category": "regression",
+      "severity": "normal",
+      "priority": "1"
+    }
+  },
+  "spec": {
+    "agent": "codeagent-tui",
+    "task": "读取 requirements.txt 文件，然后总结这个项目依赖了哪些第三方库。",
+    "testType": "regression",
+    "successCriteria": [
+      {
+        "type": "tool_coverage",
+        "tool": "read_file",
+        "required": true
+      },
+      {
+        "type": "output_contains",
+        "keywords": ["依赖", "标准库"],
+        "minMatch": 1
+      },
+      {
+        "type": "convergence"
+      }
+    ],
+    "maxRounds": 3,
+    "maxRetries": 2,
+    "timeout": 60
+  },
+  "environment": {
+    "workspace": ".",
+    "isolated": false
+  }
+}

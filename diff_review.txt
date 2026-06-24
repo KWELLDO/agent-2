@@ -1,0 +1,234 @@
+warning: in the working copy of 'cli.py', LF will be replaced by CRLF the next time Git touches it
+diff --git a/cli.py b/cli.py
+index f921eb1..ab9637e 100644
+--- a/cli.py
++++ b/cli.py
+@@ -206,6 +206,8 @@ class RichLog:
+ 
+ _TOOLS = {}
+ _COMMANDS = {}
++_TEST_TYPES = {}
++_EVALUATORS = {}
+ 
+ 
+ def tool(name, description, parameters):
+@@ -250,6 +252,66 @@ def command_help():
+     return "\n".join(f"  {n}  {c['help']}" for n, c in sorted(_COMMANDS.items()))
+ 
+ 
++# ---- 娴嬭瘯绫诲瀷娉ㄥ唽琛紙绫绘瘮 K8s CRD锛氬０鏄庡紡娉ㄥ唽鑷畾涔夋祴璇曡祫婧愮被鍨嬶級----
++
++def test_type(name, description):
++    """娉ㄥ唽涓€涓祴璇曠被鍨嬶紙绫绘瘮 CRD锛夈€傛彃浠剁敤 @test_type 瑁呴グ涓€涓惈 reconcile 鏂规硶鐨勭被鍗冲彲銆?+
++    姣忎釜娴嬭瘯绫诲瀷鏄竴涓帶鍒跺櫒锛岃礋璐ｅ皢璇ョ被鍨嬫祴璇曠敤渚嬬殑鎵ц缁撴灉璋冭皭鍒版湡鏈涚姸鎬併€?+    鎵╁睍绀轰緥锛氬湪 tests/ 涓嬫柊寤?my_test.py锛屽啓鍏?+        from cli import test_type
++
++        @test_type("my_test", "鑷畾涔夋祴璇曠被鍨?)
++        class MyTest:
++            def reconcile(self, test_case, agent_result, ctx):
++                # 杩斿洖 (converged: bool, feedback: str, metrics: dict)
++                return True, "", {}
++    閲嶅惎鍚庡嵆鐢熸晥锛屾牳蹇冩棤闇€浠讳綍鏀瑰姩銆?+    """
++    def deco(cls):
++        _TEST_TYPES[name] = {"cls": cls, "description": description}
++        return cls
++    return deco
++
++
++def evaluator(name):
++    """娉ㄥ唽涓€涓瘎浼板櫒锛堢被姣?Admission/Validation Webhook锛夈€?+
++    璇勪及鍣ㄦ帴鏀?(criterion, agent_result) 骞惰繑鍥?(passed: bool, detail: str)銆?+    璇勪及鍣ㄥ湪澹版槑寮忔祴璇曡鑼冪殑 successCriteria 涓€氳繃 type 瀛楁寮曠敤銆?+    """
++    def deco(fn):
++        _EVALUATORS[name] = fn
++        return fn
++    return deco
++
++
++def test_type_names():
++    return list(_TEST_TYPES.keys())
++
++
++def test_type_help():
++    return "\n".join(f"  {n}  {_TEST_TYPES[n]['description']}" for n in sorted(_TEST_TYPES))
++
++
++def create_test_type(name):
++    """瀹炰緥鍖栦竴涓祴璇曠被鍨嬫帶鍒跺櫒"""
++    if name not in _TEST_TYPES:
++        raise KeyError(f"鏈煡娴嬭瘯绫诲瀷: {name}锛堝彲鐢? {', '.join(_TEST_TYPES)}锛?)
++    return _TEST_TYPES[name]["cls"]()
++
++
++def evaluator_names():
++    return list(_EVALUATORS.keys())
++
++
++def call_evaluator(name, criterion, agent_result):
++    """璋冪敤璇勪及鍣紝杩斿洖 (passed, detail)"""
++    if name not in _EVALUATORS:
++        return False, f"鏈煡璇勪及鍣? {name}"
++    return _EVALUATORS[name](criterion, agent_result)
++
++
+ # ================= 涓婁笅鏂囧璞★紙鎻掍欢閫氳繃瀹冭闂?褰卞搷鏍稿績鐘舵€侊級 =================
+ 
+ class Ctx:
+@@ -489,9 +551,11 @@ def call_llm(ctx: Ctx):
+ # ================= 涓诲惊鐜?=================
+ 
+ def main():
+-    # 1. 鍔犺浇鎵€鏈夋彃浠讹紙娉ㄥ唽宸ュ叿涓庡懡浠わ級
++    # 1. 鍔犺浇鎵€鏈夋彃浠讹紙娉ㄥ唽宸ュ叿涓庡懡浠や笌娴嬭瘯绫诲瀷锛?     load_plugins("tools")
+     load_plugins("commands")
++    load_plugins("tests")
++    load_plugins("harness")
+ 
+     panel("馃殌 CodeAgent-TUI 宸插氨缁?(鎻掍欢鍖栨牳蹇?", Style.BOLD, Style.GREEN)
+ 
+diff --git a/commands/builtin.py b/commands/builtin.py
+index 7d3885b..8dbcde3 100644
+--- a/commands/builtin.py
++++ b/commands/builtin.py
+@@ -12,6 +12,9 @@ import os
+ 
+ from cli import command, Ctx, Style, command_help
+ 
++# 鍏ㄥ眬鐘舵€侊細淇濆瓨鏈€杩戜竴娆℃祴璇曞浠舵墽琛岀粨鏋滐紙渚?/testreport /testrun 鏌ヨ锛?+_last_suite = None
++
+ 
+ @command("/exit", "閫€鍑虹▼搴?)
+ def cmd_exit(arg_str, ctx: Ctx):
+@@ -88,3 +91,134 @@ def cmd_model(arg_str, ctx: Ctx):
+         return
+     ok, info = ctx.set_model(name)
+     ctx.print(("鉁?妯″瀷宸插垏鎹? " + info) if ok else ("鉂?" + info), Style.GREEN if ok else Style.RED)
++
++
++# ================= Harness Engineering 娴嬭瘯鍛戒护 =================
++
++
++@command("/test", "杩愯娴嬭瘯: /test [鏂囦欢|鐩綍]锛堟棤鍙傛暟杩愯 testcases/ 涓嬪叏閮級")
++def cmd_test(arg_str, ctx: Ctx):
++    """鎵ц澹版槑寮忔祴璇曠敤渚嬶紝椹卞姩 Agent 瀹屾垚浠诲姟骞惰瘎浼版敹鏁涖€?""
++    global _last_suite
++    from harness.controllers import TestSuiteController
++    from harness.scheduler import TestScheduler
++    from harness.resources import TestSuite, ResourceMetadata, TestCase
++    from cli import test_type_help
++
++    if arg_str.strip():
++        path = ctx.resolve(arg_str.strip())
++        if os.path.isfile(path):
++            tc = TestCase.from_json_file(path)
++            suite = TestSuite(metadata=ResourceMetadata(name=f"single-{tc.metadata.name}"))
++            suite.test_cases = [tc]
++        elif os.path.isdir(path):
++            scheduler = TestScheduler()
++            scheduler.load_testcases_from_dir(path)
++            suite = scheduler.build_suite(name=f"dir-{os.path.basename(path)}")
++        else:
++            ctx.print(f"鉂?璺緞涓嶅瓨鍦? {path}", Style.RED)
++            return
++    else:
++        default_dir = ctx.resolve("testcases")
++        if not os.path.isdir(default_dir):
++            ctx.print(f"鉂?榛樿娴嬭瘯鐩綍涓嶅瓨鍦? {default_dir}", Style.RED)
++            ctx.print("鐢ㄦ硶: /test <鏂囦欢璺緞|鐩綍璺緞>", Style.YELLOW)
++            return
++        scheduler = TestScheduler()
++        scheduler.load_testcases_from_dir(default_dir)
++        suite = scheduler.build_suite(name="default-suite")
++
++    if not suite.test_cases:
++        ctx.print("鈿狅笍 娌℃湁鎵惧埌鍙墽琛岀殑娴嬭瘯鐢ㄤ緥", Style.YELLOW)
++        return
++
++    ctx.print(f"馃搵 鍔犺浇浜?{suite.total} 涓祴璇曠敤渚?, Style.CYAN)
++    ctx.print(f"馃 鍙敤娴嬭瘯绫诲瀷:\n{test_type_help()}", Style.DIM)
++
++    controller = TestSuiteController()
++    suite = controller.reconcile(suite, ctx, verbose=True)
++    _last_suite = suite
++
++    from harness.reporter import ReportGenerator
++    reporter = ReportGenerator()
++    report = reporter.generate(suite)
++    reporter.print_report(report)
++
++
++@command("/testlist", "鍒楀嚭娴嬭瘯鐢ㄤ緥: /testlist [鐩綍]锛堟棤鍙傛暟鍒?testcases/锛?)
++def cmd_testlist(arg_str, ctx: Ctx):
++    from harness.scheduler import TestScheduler
++
++    dir_path = arg_str.strip() or "testcases"
++    full_path = ctx.resolve(dir_path)
++    if not os.path.isdir(full_path):
++        ctx.print(f"鉂?鐩綍涓嶅瓨鍦? {full_path}", Style.RED)
++        return
++
++    scheduler = TestScheduler()
++    loaded = scheduler.load_testcases_from_dir(full_path)
++    if loaded:
++        ctx.print(f"馃搵 {full_path} 涓殑娴嬭瘯鐢ㄤ緥 ({len(loaded)}):", Style.CYAN)
++        for name in loaded:
++            ctx.print(f"  鈥?{name}", Style.GREEN)
++    else:
++        ctx.print("鈿狅笍 鏈壘鍒版祴璇曠敤渚?, Style.YELLOW)
++    ctx.print(f"\n寰呮墽琛岄槦鍒?\n{scheduler.list_pending()}", Style.DIM)
++
++
++@command("/testtype", "鍒楀嚭宸叉敞鍐岀殑娴嬭瘯绫诲瀷涓庤瘎浼板櫒")
++def cmd_testtype(arg_str, ctx: Ctx):
++    from cli import test_type_help, test_type_names, evaluator_names
++    ctx.print("馃搵 宸叉敞鍐屾祴璇曠被鍨?", Style.CYAN)
++    ctx.print(test_type_help(), Style.GREEN)
++    ctx.print(f"\n馃搵 宸叉敞鍐岃瘎浼板櫒: {', '.join(evaluator_names())}", Style.DIM)
++
++
++@command("/testreport", "鐢熸垚娴嬭瘯鎶ュ憡: /testreport [json鏂囦欢璺緞]")
++def cmd_testreport(arg_str, ctx: Ctx):
++    global _last_suite
++    if not _last_suite:
++        ctx.print("鉂?娌℃湁宸叉墽琛岀殑娴嬭瘯濂椾欢锛岃鍏堣繍琛?/test", Style.RED)
++        return
++
++    from harness.reporter import ReportGenerator
++    reporter = ReportGenerator()
++    report = reporter.generate(_last_suite)
++    reporter.print_report(report)
++
++    json_path = arg_str.strip()
++    if json_path:
++        full_path = ctx.resolve(json_path)
++        reporter.save_json(report, full_path)
++
++
++@command("/testrun", "鏌ョ湅娴嬭瘯杩愯璇︽儏: /testrun [搴忓彿]")
++def cmd_testrun(arg_str, ctx: Ctx):
++    global _last_suite
++    if not _last_suite or not _last_suite.runs:
++        ctx.print("鉂?娌℃湁宸叉墽琛岀殑娴嬭瘯杩愯锛岃鍏堣繍琛?/test", Style.RED)
++        return
++
++    from harness.reporter import ReportGenerator
++    reporter = ReportGenerator()
++
++    if arg_str.strip():
++        try:
++            idx = int(arg_str.strip()) - 1
++            if 0 <= idx < len(_last_suite.runs):
++                reporter.print_details(_last_suite.runs[idx])
++            else:
++                ctx.print(f"鉂?搴忓彿瓒呭嚭鑼冨洿锛?-{len(_last_suite.runs)}锛?, Style.RED)
++        except ValueError:
++            ctx.print("鉂?璇疯緭鍏ユ暟瀛楀簭鍙?, Style.RED)
++    else:
++        ctx.print(f"馃搵 娴嬭瘯杩愯鍒楄〃 ({len(_last_suite.runs)}):", Style.CYAN)
++        for i, run in enumerate(_last_suite.runs):
++            icon = "鉁? if run.status.value == "Succeeded" else "鉂?
++            color = Style.GREEN if run.status.value == "Succeeded" else Style.RED
++            ctx.print(
++                f"  [{i+1}] {icon} {run.test_case_name} [{run.status.value}] "
++                f"({run.duration:.1f}s)",
++                color,
++            )
++        ctx.print("\n鐢?/testrun <搴忓彿> 鏌ョ湅璇︽儏", Style.DIM)

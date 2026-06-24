@@ -1,0 +1,39 @@
+{
+  "apiVersion": "harness.agent/v1",
+  "kind": "TestCase",
+  "metadata": {
+    "name": "read-file-accuracy",
+    "labels": {
+      "category": "behavioral",
+      "severity": "normal",
+      "priority": "1"
+    }
+  },
+  "spec": {
+    "agent": "codeagent-tui",
+    "task": "读取 cli.py 文件的前 10 行，并总结这个文件的用途。",
+    "testType": "behavioral",
+    "successCriteria": [
+      {
+        "type": "tool_coverage",
+        "tool": "read_file",
+        "required": true
+      },
+      {
+        "type": "output_contains",
+        "keywords": ["import", "cli"],
+        "minMatch": 1
+      },
+      {
+        "type": "convergence"
+      }
+    ],
+    "maxRounds": 3,
+    "maxRetries": 2,
+    "timeout": 60
+  },
+  "environment": {
+    "workspace": ".",
+    "isolated": false
+  }
+}

@@ -1,0 +1,26 @@
+# 知识卡导出索引文件
+schema_version: 1
+locale: zh-CN
+branch: main
+nodes_managed: true
+exported_at: "2026-06-23T08:35:36Z"
+modules:
+    "":
+        dir_name: CodeAgent-TUI 命令行智能体框架
+        title: CodeAgent-TUI 命令行智能体框架
+        scope:
+            - .gitignore
+            - cli.py
+            - requirements.txt
+            - run.ps1
+            - commands/
+            - tools/
+            - CHANGELOG.md
+            - commands\__init__.py
+            - commands\builtin.py
+            - tools\__init__.py
+            - tools\builtin.py
+        source_files: []
+        children: []
+        depends_on: []
+        related_to: []

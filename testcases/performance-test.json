@@ -1,0 +1,42 @@
+{
+  "apiVersion": "harness.agent/v1",
+  "kind": "TestCase",
+  "metadata": {
+    "name": "write-file-performance",
+    "labels": {
+      "category": "performance",
+      "severity": "normal",
+      "priority": "0"
+    }
+  },
+  "spec": {
+    "agent": "codeagent-tui",
+    "task": "在当前工作区创建一个名为 hello.txt 的文件，内容为 Hello Harness Engineering",
+    "testType": "performance",
+    "successCriteria": [
+      {
+        "type": "tool_coverage",
+        "tool": "write_file",
+        "required": true
+      },
+      {
+        "type": "latency",
+        "value": 30
+      },
+      {
+        "type": "max_rounds",
+        "value": 5
+      },
+      {
+        "type": "convergence"
+      }
+    ],
+    "maxRounds": 3,
+    "maxRetries": 1,
+    "timeout": 90
+  },
+  "environment": {
+    "workspace": ".",
+    "isolated": true
+  }
+}
